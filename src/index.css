@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #080C14;
+  --color-surface: #0F1420;
+  --color-border: #1E293B;
+  --color-accent: #3498DB;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-white;
+  }
+}

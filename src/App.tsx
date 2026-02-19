@@ -11,11 +11,7 @@ function App() {
     useSimulationStore.getState().loadAll()
   }, [])
 
-  return (
-    <div className="min-h-screen bg-background">
-      <AppRouter />
-    </div>
-  )
+  return <AppRouter />
 }
 
 export default App

@@ -1,30 +1,36 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { AppShell } from '../components/AppShell'
 import { Dashboard } from '../pages/Dashboard'
 import { NewSimulation } from '../pages/NewSimulation'
 import { ResultDetail } from '../pages/ResultDetail'
-import { SavedConfigs } from '../pages/SavedConfigs'
+import { Configs } from '../pages/Configs'
 import { Settings } from '../pages/Settings'
 
 const router = createBrowserRouter([
   {
-    path: '/',
-    element: <Dashboard />,
-  },
-  {
-    path: '/simulate',
-    element: <NewSimulation />,
-  },
-  {
-    path: '/results/:id',
-    element: <ResultDetail />,
-  },
-  {
-    path: '/configs',
-    element: <SavedConfigs />,
-  },
-  {
-    path: '/settings',
-    element: <Settings />,
+    element: <AppShell />,
+    children: [
+      {
+        path: '/',
+        element: <Dashboard />,
+      },
+      {
+        path: '/simulate',
+        element: <NewSimulation />,
+      },
+      {
+        path: '/results/:id',
+        element: <ResultDetail />,
+      },
+      {
+        path: '/configs',
+        element: <Configs />,
+      },
+      {
+        path: '/settings',
+        element: <Settings />,
+      },
+    ],
   },
 ])
 

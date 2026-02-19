@@ -1,19 +1,106 @@
 import Dexie, { type Table } from 'dexie'
-
-export interface Simulation {
-  id?: number
-  name: string
-  createdAt: Date
-}
+import type { ContainerType, ItemType, SimulationConfig, SimulationResult } from '../types'
 
 class AppDB extends Dexie {
-  simulations!: Table<Simulation>
+  containerTypes!: Table<ContainerType>
+  itemTypes!: Table<ItemType>
+  simulationConfigs!: Table<SimulationConfig>
+  simulationResults!: Table<SimulationResult>
 
   constructor() {
     super('cbmPackOptimizer')
-    this.version(1).stores({
-      simulations: '++id, createdAt',
+    this.version(2).stores({
+      containerTypes: '++id, name, isActive',
+      itemTypes: '++id, name',
+      simulationConfigs: '++id, name',
+      simulationResults: '++id, configId, computedAt',
     })
+
+    this.on('populate', () => this.seedData())
+  }
+
+  private async seedData() {
+    // Seed container types (3 shipping containers)
+    const containerTypesData: ContainerType[] = [
+      {
+        name: '20ft Standard',
+        lengthM: 5.90,
+        widthM: 2.35,
+        heightM: 2.39,
+        maxWeightKg: 21800,
+        costPerUnit: 45000,
+        isActive: true,
+      },
+      {
+        name: '40ft Standard',
+        lengthM: 12.03,
+        widthM: 2.35,
+        heightM: 2.39,
+        maxWeightKg: 26480,
+        costPerUnit: 68000,
+        isActive: true,
+      },
+      {
+        name: '40ft High Cube',
+        lengthM: 12.03,
+        widthM: 2.35,
+        heightM: 2.69,
+        maxWeightKg: 26330,
+        costPerUnit: 80000,
+        isActive: true,
+      },
+    ]
+
+    // Seed item types (4 sample items)
+    const itemTypesData: ItemType[] = [
+      {
+        name: 'Smartphone Box',
+        lengthM: 0.16,
+        widthM: 0.09,
+        heightM: 0.04,
+        weightKg: 0.25,
+        isStackable: true,
+        maxStackWeightKg: 20,
+        isFragile: false,
+        color: '#4A90E2',
+      },
+      {
+        name: 'Laptop Box',
+        lengthM: 0.40,
+        widthM: 0.30,
+        heightM: 0.10,
+        weightKg: 2.50,
+        isStackable: false,
+        maxStackWeightKg: 0,
+        isFragile: true,
+        color: '#E74C3C',
+      },
+      {
+        name: 'Textile Bale',
+        lengthM: 0.80,
+        widthM: 0.60,
+        heightM: 0.50,
+        weightKg: 30.00,
+        isStackable: true,
+        maxStackWeightKg: 150,
+        isFragile: false,
+        color: '#2ECC71',
+      },
+      {
+        name: 'Glass Display',
+        lengthM: 1.20,
+        widthM: 0.80,
+        heightM: 0.05,
+        weightKg: 8.00,
+        isStackable: false,
+        maxStackWeightKg: 0,
+        isFragile: true,
+        color: '#F39C12',
+      },
+    ]
+
+    await this.containerTypes.bulkAdd(containerTypesData)
+    await this.itemTypes.bulkAdd(itemTypesData)
   }
 }
 

@@ -227,7 +227,6 @@ export function ContainerViewer3D({
     const H = logicalSizeRef.current.h
     const cx = W / 2
     const cy = H / 2
-    const isMobile = isMobileRef.current
 
     ctx.clearRect(0, 0, W, H)
 
@@ -254,73 +253,31 @@ export function ContainerViewer3D({
     const faces: Face[] = []
     const hId = highlightRef.current
 
-    // ── Item merging for >50 items on mobile ──────────────────────
-    const shouldMerge = isMobile && packed.placedItems.length > 50
+    // ── Item boxes ─────────────────────────────────────────────────
+    for (const item of packed.placedItems) {
+      const info = itemTypeMap.get(item.itemTypeId)
+      const color = info?.color ?? '#888888'
+      const isHighlighted = hId === null || hId === item.itemTypeId
+      const alpha = isHighlighted ? 0.92 : 0.15
 
-    if (shouldMerge) {
-      // Group items by itemTypeId and compute bounding box for each group
-      const groups = new Map<number, { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number; count: number }>()
-      for (const item of packed.placedItems) {
-        const g = groups.get(item.itemTypeId)
-        const x1 = item.px, y1 = item.pz, z1 = item.py
-        const x2 = x1 + item.placedLengthM, y2 = y1 + item.placedHeightM, z2 = z1 + item.placedWidthM
-        if (g) {
-          g.minX = Math.min(g.minX, x1); g.minY = Math.min(g.minY, y1); g.minZ = Math.min(g.minZ, z1)
-          g.maxX = Math.max(g.maxX, x2); g.maxY = Math.max(g.maxY, y2); g.maxZ = Math.max(g.maxZ, z2)
-          g.count++
-        } else {
-          groups.set(item.itemTypeId, { minX: x1, minY: y1, minZ: z1, maxX: x2, maxY: y2, maxZ: z2, count: 1 })
-        }
-      }
+      // Remap: 3D_x = px (length), 3D_y = pz (height→up), 3D_z = py (width→depth)
+      const rawCorners = boxCorners(
+        item.px, item.pz, item.py,
+        item.placedLengthM, item.placedHeightM, item.placedWidthM,
+      )
+      const transformedCorners = rawCorners.map(transform)
+      const faceQuads = boxFaces(transformedCorners)
 
-      for (const [typeId, g] of groups) {
-        const info = itemTypeMap.get(typeId)
-        const color = info?.color ?? '#888888'
-        const isHighlighted = hId === null || hId === typeId
-        const alpha = isHighlighted ? 0.92 : 0.15
-
-        const rawCorners = boxCorners(g.minX, g.minY, g.minZ, g.maxX - g.minX, g.maxY - g.minY, g.maxZ - g.minZ)
-        const transformedCorners = rawCorners.map(transform)
-        const faceQuads = boxFaces(transformedCorners)
-
-        for (let i = 0; i < 6; i++) {
-          const verts = faceQuads[i]
-          const shade = faceShadeType(verts)
-          const centroid = faceCentroid(verts)
-          faces.push({
-            vertices: verts,
-            color: shadeFace(color, shade, alpha),
-            alpha,
-            depth: centroid.z,
-          })
-        }
-      }
-    } else {
-      // Normal per-item rendering
-      for (const item of packed.placedItems) {
-        const info = itemTypeMap.get(item.itemTypeId)
-        const color = info?.color ?? '#888888'
-        const isHighlighted = hId === null || hId === item.itemTypeId
-        const alpha = isHighlighted ? 0.92 : 0.15
-
-        const rawCorners = boxCorners(
-          item.px, item.pz, item.py,
-          item.placedLengthM, item.placedHeightM, item.placedWidthM,
-        )
-        const transformedCorners = rawCorners.map(transform)
-        const faceQuads = boxFaces(transformedCorners)
-
-        for (let i = 0; i < 6; i++) {
-          const verts = faceQuads[i]
-          const shade = faceShadeType(verts)
-          const centroid = faceCentroid(verts)
-          faces.push({
-            vertices: verts,
-            color: shadeFace(color, shade, alpha),
-            alpha,
-            depth: centroid.z,
-          })
-        }
+      for (let i = 0; i < 6; i++) {
+        const verts = faceQuads[i]
+        const shade = faceShadeType(verts)
+        const centroid = faceCentroid(verts)
+        faces.push({
+          vertices: verts,
+          color: shadeFace(color, shade, alpha),
+          alpha,
+          depth: centroid.z,
+        })
       }
     }
 
@@ -335,9 +292,6 @@ export function ContainerViewer3D({
     // ── Sort faces (painter's algorithm) ───────────────────────────
     faces.sort((a, b) => a.depth - b.depth)
 
-    // Edge line width: thicker on mobile for visibility
-    const edgeLineWidth = isMobile ? 1 : 0.5
-
     // ── Render faces ───────────────────────────────────────────────
     for (const face of faces) {
       ctx.beginPath()
@@ -350,8 +304,9 @@ export function ContainerViewer3D({
       ctx.closePath()
       ctx.fillStyle = face.color
       ctx.fill()
+      // Thin edge outline
       ctx.strokeStyle = `rgba(0,0,0,0.3)`
-      ctx.lineWidth = edgeLineWidth
+      ctx.lineWidth = 0.5
       ctx.stroke()
     }
 
@@ -401,39 +356,6 @@ export function ContainerViewer3D({
       ctx.fillText(axis.label, endScreen.x + 4, endScreen.y - 4)
     }
 
-    // ── Merged item count labels ───────────────────────────────────
-    if (shouldMerge) {
-      const groups = new Map<number, { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number; count: number }>()
-      for (const item of packed.placedItems) {
-        const g = groups.get(item.itemTypeId)
-        const x1 = item.px, y1 = item.pz, z1 = item.py
-        const x2 = x1 + item.placedLengthM, y2 = y1 + item.placedHeightM, z2 = z1 + item.placedWidthM
-        if (g) {
-          g.minX = Math.min(g.minX, x1); g.minY = Math.min(g.minY, y1); g.minZ = Math.min(g.minZ, z1)
-          g.maxX = Math.max(g.maxX, x2); g.maxY = Math.max(g.maxY, y2); g.maxZ = Math.max(g.maxZ, z2)
-          g.count++
-        } else {
-          groups.set(item.itemTypeId, { minX: x1, minY: y1, minZ: z1, maxX: x2, maxY: y2, maxZ: z2, count: 1 })
-        }
-      }
-      for (const [typeId, g] of groups) {
-        const isHighlighted = hId === null || hId === typeId
-        if (!isHighlighted) continue
-        // Label on top-center of bounding box
-        const topCenter = transform({
-          x: (g.minX + g.maxX) / 2,
-          y: g.maxY,
-          z: (g.minZ + g.maxZ) / 2,
-        })
-        const screenPt = projectIso(topCenter, zoom, cx, cy)
-        ctx.font = 'bold 11px ui-monospace, monospace'
-        ctx.fillStyle = '#fff'
-        ctx.textAlign = 'center'
-        const info = itemTypeMap.get(typeId)
-        ctx.fillText(`${info?.name ?? ''} x${g.count}`, screenPt.x, screenPt.y - 6)
-        ctx.textAlign = 'start'
-      }
-    }
   }, [container, packed.placedItems, itemTypeMap])
 
   // ── Animate to preset ──────────────────────────────────────────────

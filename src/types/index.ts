@@ -20,6 +20,7 @@ export interface ItemType {
   maxStackWeightKg: number
   isFragile: boolean
   color: string              // hex e.g. "#3498DB"
+  showItemCode?: boolean     // show initials label on 3D placed boxes
 }
 
 export interface SimulationConfig {

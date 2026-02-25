@@ -252,7 +252,10 @@ export function ResultDetail() {
   }, [allItems])
 
   const itemTypeInfos = useMemo(
-    () => allItems.filter((it) => it.id != null).map((it) => ({ id: it.id!, name: it.name, color: it.color })),
+    () =>
+      allItems
+        .filter((it) => it.id != null)
+        .map((it) => ({ id: it.id!, name: it.name, color: it.color, showItemCode: it.showItemCode ?? false })),
     [allItems],
   )
 

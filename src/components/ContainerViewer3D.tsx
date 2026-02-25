@@ -16,6 +16,11 @@ interface ItemTypeInfo {
   id: number
   name: string
   color: string
+  showItemCode?: boolean
+}
+
+function toItemCode(name: string): string {
+  return name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? '').join('')
 }
 
 interface Props {
@@ -281,6 +286,40 @@ export function ContainerViewer3D({
       }
     }
 
+    // ── Collect item code label anchors ────────────────────────────
+    // For each item with showItemCode, find the front-facing face
+    // (minimum depth after transform = rendered last = most visible).
+    type LabelAnchor = { screenX: number; screenY: number; code: string }
+    const labelAnchors: LabelAnchor[] = []
+
+    for (const item of packed.placedItems) {
+      const info = itemTypeMap.get(item.itemTypeId)
+      if (!info?.showItemCode) continue
+      const isHighlighted = hId === null || hId === item.itemTypeId
+      if (!isHighlighted) continue
+
+      const rawCorners = boxCorners(
+        item.px, item.pz, item.py,
+        item.placedLengthM, item.placedHeightM, item.placedWidthM,
+      )
+      const tCorners = rawCorners.map(transform)
+      const faceQuads = boxFaces(tCorners)
+
+      let minDepth = Infinity
+      let frontCentroid: Vec3 | null = null
+      for (const verts of faceQuads) {
+        const c = faceCentroid(verts)
+        if (c.z < minDepth) {
+          minDepth = c.z
+          frontCentroid = c
+        }
+      }
+      if (frontCentroid) {
+        const screen = projectIso(frontCentroid, zoom, cx, cy)
+        labelAnchors.push({ screenX: screen.x, screenY: screen.y, code: toItemCode(info.name) })
+      }
+    }
+
     // ── Container wireframe ────────────────────────────────────────
     const containerCorners = boxCorners(
       0, 0, 0,
@@ -323,6 +362,23 @@ export function ContainerViewer3D({
       ctx.stroke()
     }
     ctx.setLineDash([])
+
+    // ── Item code labels ───────────────────────────────────────────
+    if (labelAnchors.length > 0) {
+      const fontSize = Math.max(8, Math.min(14, zoom * 0.28))
+      ctx.font = `bold ${fontSize}px ui-monospace, monospace`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      for (const label of labelAnchors) {
+        // Drop shadow for contrast against any box color
+        ctx.fillStyle = 'rgba(0,0,0,0.65)'
+        ctx.fillText(label.code, label.screenX + 1, label.screenY + 1)
+        ctx.fillStyle = '#ffffff'
+        ctx.fillText(label.code, label.screenX, label.screenY)
+      }
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'alphabetic'
+    }
 
     // ── Axis labels ────────────────────────────────────────────────
     const origin = transform({ x: 0, y: 0, z: 0 })

@@ -36,6 +36,7 @@ interface ItemForm {
   maxStackWeightKg: string
   isFragile: boolean
   color: string
+  showItemCode: boolean
 }
 
 type ContainerFormErrors = Partial<Record<keyof Omit<ContainerForm, 'isActive'>, string>>
@@ -65,6 +66,7 @@ const EMPTY_ITEM: ItemForm = {
   maxStackWeightKg: '',
   isFragile: false,
   color: '#3498DB',
+  showItemCode: false,
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +109,12 @@ function itemToForm(it: ItemType): ItemForm {
     maxStackWeightKg: String(it.maxStackWeightKg),
     isFragile: it.isFragile,
     color: it.color,
+    showItemCode: it.showItemCode ?? false,
   }
+}
+
+function toItemCode(name: string): string {
+  return name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? '').join('')
 }
 
 function validateContainer(f: ContainerForm): ContainerFormErrors {
@@ -712,6 +719,7 @@ function ItemTypesSection() {
       maxStackWeightKg: form.isStackable ? n(form.maxStackWeightKg) : 0,
       isFragile: form.isFragile,
       color: form.color,
+      showItemCode: form.showItemCode,
     }
     if (editing?.id != null) {
       await store.update(editing.id, data)
@@ -1031,6 +1039,23 @@ function ItemTypesSection() {
             </div>
             <Toggle checked={form.isFragile} onChange={(v) => set({ isFragile: v })} />
           </div>
+        </div>
+
+        <SectionDivider label="Display" />
+
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-white/80">Show Item Code</p>
+            <p className="text-xs text-white/30 mt-0.5">
+              Display initials on placed boxes in 3D view
+              {form.name.trim() && (
+                <span className="ml-1 font-mono text-accent/70">
+                  (e.g. "{toItemCode(form.name)}")
+                </span>
+              )}
+            </p>
+          </div>
+          <Toggle checked={form.showItemCode} onChange={(v) => set({ showItemCode: v })} />
         </div>
 
         {store.error && (

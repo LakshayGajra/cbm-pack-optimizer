@@ -1,6 +1,93 @@
 import Dexie, { type Table } from 'dexie'
 import type { ContainerType, ItemType, SimulationConfig, SimulationResult } from '../types'
 
+// New containers added in DB v3 (Veero & Tata Ace pickup variants)
+const pickupContainersV3: Omit<ContainerType, 'id'>[] = [
+  // --- Mahindra Veero ---
+  {
+    name: 'Veero XL Standard Deck',
+    lengthM: 2.765,
+    widthM: 1.644,
+    heightM: 0.425,
+    maxWeightKg: 1550,
+    costPerUnit: 4500,
+    isActive: true,
+  },
+  {
+    name: 'Veero XXL Standard Deck',
+    lengthM: 3.035,
+    widthM: 1.644,
+    heightM: 0.425,
+    maxWeightKg: 1600,
+    costPerUnit: 5000,
+    isActive: true,
+  },
+  {
+    name: 'Veero XL High Deck',
+    lengthM: 2.765,
+    widthM: 1.644,
+    heightM: 1.20,
+    maxWeightKg: 1550,
+    costPerUnit: 5000,
+    isActive: true,
+  },
+  {
+    name: 'Veero XXL High Deck',
+    lengthM: 3.035,
+    widthM: 1.644,
+    heightM: 1.20,
+    maxWeightKg: 1600,
+    costPerUnit: 5500,
+    isActive: true,
+  },
+  // --- Tata Ace ---
+  {
+    name: 'Tata Ace Gold Standard',
+    lengthM: 2.20,
+    widthM: 1.49,
+    heightM: 0.30,
+    maxWeightKg: 750,
+    costPerUnit: 2500,
+    isActive: true,
+  },
+  {
+    name: 'Tata Ace Gold High Deck',
+    lengthM: 2.14,
+    widthM: 1.43,
+    heightM: 1.205,
+    maxWeightKg: 750,
+    costPerUnit: 3000,
+    isActive: true,
+  },
+  {
+    name: 'Tata Ace Gold CNG',
+    lengthM: 2.52,
+    widthM: 1.49,
+    heightM: 0.30,
+    maxWeightKg: 900,
+    costPerUnit: 2800,
+    isActive: true,
+  },
+  {
+    name: 'Tata Ace EV',
+    lengthM: 2.163,
+    widthM: 1.475,
+    heightM: 1.847,
+    maxWeightKg: 600,
+    costPerUnit: 3500,
+    isActive: true,
+  },
+  {
+    name: 'Tata Super Ace',
+    lengthM: 2.630,
+    widthM: 1.460,
+    heightM: 0.30,
+    maxWeightKg: 1000,
+    costPerUnit: 4000,
+    isActive: true,
+  },
+]
+
 class AppDB extends Dexie {
   containerTypes!: Table<ContainerType>
   itemTypes!: Table<ItemType>
@@ -15,6 +102,11 @@ class AppDB extends Dexie {
       simulationConfigs: '++id, name',
       simulationResults: '++id, configId, computedAt',
     })
+
+    // v3: add Veero & Tata Ace pickup container types to existing DBs
+    this.version(3).upgrade(tx =>
+      tx.table('containerTypes').bulkAdd(pickupContainersV3)
+    )
 
     this.on('populate', () => this.seedData())
   }
@@ -49,6 +141,7 @@ class AppDB extends Dexie {
         costPerUnit: 80000,
         isActive: true,
       },
+      ...pickupContainersV3,
     ]
 
     // Seed item types (4 sample items)

@@ -1,5 +1,5 @@
-import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
-import type { PackedContainer } from '../types'
+import { useRef, useEffect, useCallback, useState } from 'react'
+import type { PlacedItem } from '../types'
 import {
   ViewFrontIcon,
   ViewTopIcon,
@@ -24,9 +24,16 @@ import {
   boxEdges,
   faceShadeType,
   lerp,
+  easeOutCubic,
 } from '../lib/3d-helpers'
 
 // ── Types ──────────────────────────────────────────────────────────────
+
+export interface AnimatedItem extends PlacedItem {
+  animStartTime: number
+  animFromPz: number
+  animDone: boolean
+}
 
 interface ItemTypeInfo {
   id: number
@@ -37,93 +44,57 @@ interface ItemTypeInfo {
 
 interface Props {
   container: { lengthM: number; widthM: number; heightM: number }
-  packed: PackedContainer
-  itemTypes: ItemTypeInfo[]
-  highlightId: number | null
-  onHighlightChange: (id: number | null) => void
-  containerCount: number
-  activeIndex: number
-  onSwipeContainer: (dir: 'prev' | 'next') => void
+  placedItems: PlacedItem[]
+  animatedItems: AnimatedItem[]
+  itemTypeMap: Map<number, ItemTypeInfo>
+  onAnimationsDone: () => void
 }
+
+const ANIM_DURATION = 400 // ms
 
 // ── Component ──────────────────────────────────────────────────────────
 
-export function ContainerViewer3D({
+export function LivePackingViewer({
   container,
-  packed,
-  itemTypes,
-  highlightId,
-  onHighlightChange,
-  containerCount,
-  activeIndex,
-  onSwipeContainer,
+  placedItems,
+  animatedItems,
+  itemTypeMap,
+  onAnimationsDone,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const logicalSizeRef = useRef({ w: 400, h: 300 })
 
-  // Rotation & zoom state
   const rotXRef = useRef(-0.45)
   const rotYRef = useRef(0.65)
   const zoomRef = useRef(1)
 
-  // Animation targets for smooth preset transitions
   const targetRotXRef = useRef<number | null>(null)
   const targetRotYRef = useRef<number | null>(null)
   const animatingRef = useRef(false)
 
-  // Drag state
   const draggingRef = useRef(false)
   const lastPosRef = useRef({ x: 0, y: 0 })
-
-  // Pinch zoom state
   const initialPinchDistRef = useRef<number | null>(null)
   const initialPinchZoomRef = useRef(1)
-
-  // Double-tap detection
   const lastTapRef = useRef(0)
 
-  // Swipe detection
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null)
-
-  // Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState(false)
 
-  // Gesture hint — initialize from localStorage to avoid setState in effect
-  const [showHint, setShowHint] = useState(() => {
-    const key = 'viewer3d-hint-shown'
-    if (!localStorage.getItem(key)) {
-      localStorage.setItem(key, '1')
-      return true
-    }
-    return false
-  })
-  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Keep refs for animation loop access
+  const placedItemsRef = useRef(placedItems)
+  const animatedItemsRef = useRef(animatedItems)
+  const itemTypeMapRef = useRef(itemTypeMap)
+  const onAnimationsDoneRef = useRef(onAnimationsDone)
 
-  // Highlight ref for draw
-  const highlightRef = useRef<number | null>(null)
-  useEffect(() => {
-    highlightRef.current = highlightId
-  }, [highlightId])
-
-  // Mobile detection ref
-  const isMobileRef = useRef(false)
-
-  // Item type lookup
-  const itemTypeMap = useMemo(() => {
-    const m = new Map<number, ItemTypeInfo>()
-    for (const it of itemTypes) m.set(it.id, it)
-    return m
-  }, [itemTypes])
-
-  // Unique item types present
-  const presentTypes = packed.packedItems
-    .map((pi) => itemTypeMap.get(pi.itemTypeId))
-    .filter((t): t is ItemTypeInfo => t != null)
+  useEffect(() => { placedItemsRef.current = placedItems }, [placedItems])
+  useEffect(() => { animatedItemsRef.current = animatedItems }, [animatedItems])
+  useEffect(() => { itemTypeMapRef.current = itemTypeMap }, [itemTypeMap])
+  useEffect(() => { onAnimationsDoneRef.current = onAnimationsDone }, [onAnimationsDone])
 
   // ── Draw function ──────────────────────────────────────────────────
 
-  const draw = useCallback(() => {
+  const drawFrame = useCallback((now: number) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
@@ -136,8 +107,8 @@ export function ContainerViewer3D({
 
     ctx.clearRect(0, 0, W, H)
 
-    const rotX = rotXRef.current
-    const rotY = rotYRef.current
+    const rotXVal = rotXRef.current
+    const rotYVal = rotYRef.current
 
     const maxDim = Math.max(container.lengthM, container.widthM, container.heightM)
     const baseZoom = Math.min(W, H) / (maxDim * 3.2)
@@ -153,22 +124,37 @@ export function ContainerViewer3D({
         y: p.y - halfH,
         z: p.z - halfW,
       }
-      return rotateX(rotateY(centered, rotY), rotX)
+      return rotateX(rotateY(centered, rotYVal), rotXVal)
     }
 
     const faces: Face[] = []
-    const hId = highlightRef.current
+
+    // Build combined item list: static items + animated items with interpolated pz
+    const allItems: Array<PlacedItem & { effectivePz: number }> = []
+
+    for (const item of placedItemsRef.current) {
+      allItems.push({ ...item, effectivePz: item.pz })
+    }
+
+    let hasActiveAnims = false
+    for (const anim of animatedItemsRef.current) {
+      const elapsed = now - anim.animStartTime
+      const t = Math.min(1, elapsed / ANIM_DURATION)
+      const easedT = easeOutCubic(t)
+      const effectivePz = lerp(anim.animFromPz, anim.pz, easedT)
+      allItems.push({ ...anim, effectivePz })
+      if (t < 1) hasActiveAnims = true
+    }
 
     // ── Item boxes ─────────────────────────────────────────────────
-    for (const item of packed.placedItems) {
-      const info = itemTypeMap.get(item.itemTypeId)
+    for (const item of allItems) {
+      const info = itemTypeMapRef.current.get(item.itemTypeId)
       const color = info?.color ?? '#888888'
-      const isHighlighted = hId === null || hId === item.itemTypeId
-      const alpha = isHighlighted ? 0.92 : 0.15
+      const alpha = 0.92
 
-      // Remap: 3D_x = px (length), 3D_y = pz (height→up), 3D_z = py (width→depth)
+      // Remap: 3D_x = px, 3D_y = pz (height->up), 3D_z = py (width->depth)
       const rawCorners = boxCorners(
-        item.px, item.pz, item.py,
+        item.px, item.effectivePz, item.py,
         item.placedLengthM, item.placedHeightM, item.placedWidthM,
       )
       const transformedCorners = rawCorners.map(transform)
@@ -187,20 +173,16 @@ export function ContainerViewer3D({
       }
     }
 
-    // ── Collect item code label anchors ────────────────────────────
-    // For each item with showItemCode, find the front-facing face
-    // (minimum depth after transform = rendered last = most visible).
+    // ── Item code labels ────────────────────────────────
     type LabelAnchor = { screenX: number; screenY: number; code: string }
     const labelAnchors: LabelAnchor[] = []
 
-    for (const item of packed.placedItems) {
-      const info = itemTypeMap.get(item.itemTypeId)
+    for (const item of allItems) {
+      const info = itemTypeMapRef.current.get(item.itemTypeId)
       if (!info?.showItemCode) continue
-      const isHighlighted = hId === null || hId === item.itemTypeId
-      if (!isHighlighted) continue
 
       const rawCorners = boxCorners(
-        item.px, item.pz, item.py,
+        item.px, item.effectivePz, item.py,
         item.placedLengthM, item.placedHeightM, item.placedWidthM,
       )
       const tCorners = rawCorners.map(transform)
@@ -244,7 +226,6 @@ export function ContainerViewer3D({
       ctx.closePath()
       ctx.fillStyle = face.color
       ctx.fill()
-      // Thin edge outline
       ctx.strokeStyle = `rgba(0,0,0,0.3)`
       ctx.lineWidth = 0.5
       ctx.stroke()
@@ -271,7 +252,6 @@ export function ContainerViewer3D({
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       for (const label of labelAnchors) {
-        // Drop shadow for contrast against any box color
         ctx.fillStyle = 'rgba(0,0,0,0.65)'
         ctx.fillText(label.code, label.screenX + 1, label.screenY + 1)
         ctx.fillStyle = '#ffffff'
@@ -293,7 +273,7 @@ export function ContainerViewer3D({
 
     const originScreen = projectIso(origin, zoom, cx, cy)
     for (const axis of axes) {
-      const rotated = rotateX(rotateY(axis.dir, rotY), rotX)
+      const rotated = rotateX(rotateY(axis.dir, rotYVal), rotXVal)
       const end: Vec3 = {
         x: origin.x + rotated.x,
         y: origin.y + rotated.y,
@@ -313,7 +293,56 @@ export function ContainerViewer3D({
       ctx.fillText(axis.label, endScreen.x + 4, endScreen.y - 4)
     }
 
-  }, [container, packed.placedItems, itemTypeMap])
+    return hasActiveAnims
+  }, [container])
+
+  // ── Static draw (no animation) ──────────────────────────────────────
+
+  const draw = useCallback(() => {
+    drawFrame(performance.now())
+  }, [drawFrame])
+
+  // ── Animation loop ──────────────────────────────────────────────────
+
+  const animLoopRef = useRef<number | null>(null)
+
+  const startAnimLoop = useCallback(() => {
+    if (animLoopRef.current !== null) return
+
+    const loop = () => {
+      const hasActive = drawFrame(performance.now())
+      if (hasActive) {
+        animLoopRef.current = requestAnimationFrame(loop)
+      } else {
+        animLoopRef.current = null
+        onAnimationsDoneRef.current()
+      }
+    }
+    animLoopRef.current = requestAnimationFrame(loop)
+  }, [drawFrame])
+
+  // Start animation loop when animatedItems change
+  useEffect(() => {
+    if (animatedItems.some(a => !a.animDone)) {
+      startAnimLoop()
+    } else {
+      draw()
+    }
+  }, [animatedItems, startAnimLoop, draw])
+
+  // Redraw on static items change
+  useEffect(() => {
+    draw()
+  }, [placedItems, draw])
+
+  // Cleanup animation loop
+  useEffect(() => {
+    return () => {
+      if (animLoopRef.current !== null) {
+        cancelAnimationFrame(animLoopRef.current)
+      }
+    }
+  }, [])
 
   // ── Animate to preset ──────────────────────────────────────────────
 
@@ -356,16 +385,6 @@ export function ContainerViewer3D({
     requestAnimationFrame(animate)
   }, [draw])
 
-  // ── Gesture hint auto-hide ──────────────────────────────────────────
-
-  useEffect(() => {
-    if (!showHint) return
-    hintTimerRef.current = setTimeout(() => setShowHint(false), 3000)
-    return () => {
-      if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
-    }
-  }, [showHint])
-
   // ── Resize observer ────────────────────────────────────────────────
 
   useEffect(() => {
@@ -377,14 +396,12 @@ export function ContainerViewer3D({
       for (const entry of entries) {
         const { width, height } = entry.contentRect
         if (width === 0 || height === 0) continue
-        // Cap DPR at 2 for performance
         const dpr = Math.min(window.devicePixelRatio || 1, 2)
         canvas.width = width * dpr
         canvas.height = height * dpr
         canvas.style.width = `${width}px`
         canvas.style.height = `${height}px`
         logicalSizeRef.current = { w: width, h: height }
-        isMobileRef.current = width < 768
         const ctx = canvas.getContext('2d')
         if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
         draw()
@@ -394,11 +411,6 @@ export function ContainerViewer3D({
     ro.observe(wrapper)
     return () => ro.disconnect()
   }, [draw])
-
-  // Redraw on highlight change
-  useEffect(() => {
-    draw()
-  }, [highlightId, draw])
 
   // ── Mouse & touch events ───────────────────────────────────────────
 
@@ -419,7 +431,6 @@ export function ContainerViewer3D({
       rotXRef.current += dy * 0.008
       rotXRef.current = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotXRef.current))
       lastPosRef.current = { x: e.clientX, y: e.clientY }
-      // Cancel any ongoing preset animation
       targetRotXRef.current = null
       targetRotYRef.current = null
       draw()
@@ -436,28 +447,20 @@ export function ContainerViewer3D({
       draw()
     }
 
-    // ── Touch events ─────────────────────────────────────────────
-
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 1) {
         const now = Date.now()
         const touch = e.touches[0]
-
-        // Double-tap detection
         if (now - lastTapRef.current < 300) {
-          // Reset to isometric with animation
           animateToPreset('iso')
           zoomRef.current = 1
           lastTapRef.current = 0
           return
         }
         lastTapRef.current = now
-
         draggingRef.current = true
         lastPosRef.current = { x: touch.clientX, y: touch.clientY }
-        touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: now }
       } else if (e.touches.length === 2) {
-        // Start pinch
         draggingRef.current = false
         const dx = e.touches[0].clientX - e.touches[1].clientX
         const dy = e.touches[0].clientY - e.touches[1].clientY
@@ -468,9 +471,7 @@ export function ContainerViewer3D({
 
     const onTouchMove = (e: TouchEvent) => {
       e.preventDefault()
-
       if (e.touches.length === 2 && initialPinchDistRef.current !== null) {
-        // Pinch zoom
         const dx = e.touches[0].clientX - e.touches[1].clientX
         const dy = e.touches[0].clientY - e.touches[1].clientY
         const dist = Math.sqrt(dx * dx + dy * dy)
@@ -479,38 +480,21 @@ export function ContainerViewer3D({
         draw()
         return
       }
-
       if (!draggingRef.current || e.touches.length !== 1) return
-
       const dx = e.touches[0].clientX - lastPosRef.current.x
       const dy = e.touches[0].clientY - lastPosRef.current.y
       rotYRef.current += dx * 0.008
       rotXRef.current += dy * 0.008
       rotXRef.current = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotXRef.current))
       lastPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-      // Cancel any ongoing preset animation
       targetRotXRef.current = null
       targetRotYRef.current = null
       draw()
     }
 
-    const onTouchEnd = (e: TouchEvent) => {
-      // Detect horizontal swipe for container switching
-      if (touchStartRef.current && e.changedTouches.length === 1) {
-        const endX = e.changedTouches[0].clientX
-        const endY = e.changedTouches[0].clientY
-        const dx = endX - touchStartRef.current.x
-        const dy = endY - touchStartRef.current.y
-        const elapsed = Date.now() - touchStartRef.current.time
-
-        if (elapsed < 400 && Math.abs(dx) > 60 && Math.abs(dy) < 40) {
-          onSwipeContainer(dx > 0 ? 'prev' : 'next')
-        }
-      }
-
+    const onTouchEnd = () => {
       draggingRef.current = false
       initialPinchDistRef.current = null
-      touchStartRef.current = null
     }
 
     canvas.addEventListener('mousedown', onMouseDown)
@@ -530,7 +514,7 @@ export function ContainerViewer3D({
       canvas.removeEventListener('touchmove', onTouchMove)
       canvas.removeEventListener('touchend', onTouchEnd)
     }
-  }, [draw, animateToPreset, onSwipeContainer])
+  }, [draw, animateToPreset])
 
   // ── ESC to close fullscreen ────────────────────────────────────────
 
@@ -542,8 +526,6 @@ export function ContainerViewer3D({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [isFullscreen])
-
-  // Redraw on fullscreen change (ResizeObserver handles the resize)
 
   // ── Render ─────────────────────────────────────────────────────────
 
@@ -573,7 +555,6 @@ export function ContainerViewer3D({
 
         <div className="flex-1" />
 
-        {/* Fullscreen toggle */}
         <button
           type="button"
           onClick={() => setIsFullscreen(!isFullscreen)}
@@ -596,7 +577,6 @@ export function ContainerViewer3D({
       >
         <canvas ref={canvasRef} className="absolute inset-0" />
 
-        {/* Fullscreen close button */}
         {isFullscreen && (
           <button
             type="button"
@@ -607,72 +587,12 @@ export function ContainerViewer3D({
           </button>
         )}
 
-        {/* Gesture hint overlay */}
-        {showHint && (
-          <div
-            className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none transition-opacity duration-700"
-            style={{ opacity: showHint ? 1 : 0 }}
-          >
-            <div className="text-center text-xs text-slate-300 space-y-1">
-              <p>Drag to rotate</p>
-              <p>Pinch to zoom</p>
-              <p>Double tap to reset</p>
-            </div>
-          </div>
-        )}
-
-        {/* Drag hint (desktop) */}
-        {!isFullscreen && !showHint && (
+        {!isFullscreen && (
           <div className="absolute bottom-2 right-2 text-[10px] text-slate-500 select-none pointer-events-none hidden md:block">
             Drag to rotate · Scroll to zoom
           </div>
         )}
       </div>
-
-      {/* Container dots indicator */}
-      {containerCount > 1 && (
-        <div className="flex justify-center gap-1.5 py-1">
-          {Array.from({ length: containerCount }, (_, i) => (
-            <span
-              key={i}
-              className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                i === activeIndex ? 'bg-accent' : 'bg-slate-600'
-              }`}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Legend (desktop only — mobile uses bottom sheet) */}
-      {presentTypes.length > 0 && (
-        <div className="hidden md:flex flex-wrap gap-2">
-          {presentTypes.map((t) => {
-            const count = packed.packedItems.find((p) => p.itemTypeId === t.id)?.quantity ?? 0
-            const isActive = highlightId === null || highlightId === t.id
-            return (
-              <button
-                key={t.id}
-                type="button"
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all border ${
-                  isActive
-                    ? 'border-border bg-surface text-slate-200'
-                    : 'border-transparent bg-surface/40 text-slate-500'
-                }`}
-                onMouseEnter={() => onHighlightChange(t.id)}
-                onMouseLeave={() => onHighlightChange(null)}
-                onClick={() => onHighlightChange(highlightId === t.id ? null : t.id)}
-              >
-                <span
-                  className="w-3 h-3 rounded-sm shrink-0"
-                  style={{ backgroundColor: t.color }}
-                />
-                {t.name}
-                <span className="text-slate-400">x{count}</span>
-              </button>
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }

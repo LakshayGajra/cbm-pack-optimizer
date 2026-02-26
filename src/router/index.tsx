@@ -4,6 +4,7 @@ import { Dashboard } from '../pages/Dashboard'
 import { NewSimulation } from '../pages/NewSimulation'
 import { ResultDetail } from '../pages/ResultDetail'
 import { Configs } from '../pages/Configs'
+import { LivePacking } from '../pages/LivePacking'
 import { Settings } from '../pages/Settings'
 
 const router = createBrowserRouter([
@@ -21,6 +22,10 @@ const router = createBrowserRouter([
       {
         path: '/results/:id',
         element: <ResultDetail />,
+      },
+      {
+        path: '/live',
+        element: <LivePacking />,
       },
       {
         path: '/configs',

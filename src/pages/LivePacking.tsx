@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useCallback, useMemo, useRef } from 'react'
 import { useContainerStore } from '../store/containerStore'
 import { useItemStore } from '../store/itemStore'
+import { useCurrencyFormatter } from '../lib/currency'
 import { packItems } from '../lib/packing/engine'
 import { LivePackingViewer, type AnimatedItem } from '../components/LivePackingViewer'
 import { PlusIcon, TrashIcon } from '../components/icons'
@@ -101,6 +102,7 @@ export function LivePacking() {
   const loadContainers = useContainerStore(s => s.loadAll)
   const itemTypes = useItemStore(s => s.items)
   const loadItems = useItemStore(s => s.loadAll)
+  const fmt = useCurrencyFormatter()
 
   const [state, dispatch] = useReducer(reducer, initialState)
 
@@ -443,7 +445,7 @@ export function LivePacking() {
             <div className="flex items-center gap-1">
               <span className="text-slate-400">Cost:</span>
               <span className="text-white font-medium tabular-nums">
-                {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(state.cost)}
+                {fmt(state.cost)}
               </span>
             </div>
           )}

@@ -10,13 +10,8 @@ import {
   ArrowRightIcon,
   CubeIcon,
 } from '../components/icons'
+import { useCurrencyFormatter, useCurrencySymbol } from '../lib/currency'
 import type { SimulationResult, ContainerType } from '../types'
-
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-function fmtINR(n: number) {
-  return '₹' + n.toLocaleString('en-IN')
-}
 
 function timeAgo(d: Date): string {
   const now = Date.now()
@@ -50,6 +45,8 @@ export function Dashboard() {
   const results = useSimulationStore((s) => s.results)
   const configs = useSimulationStore((s) => s.configs)
   const allContainers = useContainerStore((s) => s.items)
+  const fmt = useCurrencyFormatter()
+  const currencySymbol = useCurrencySymbol()
 
   // Build lookup
   const containerMap = useMemo(() => {
@@ -162,8 +159,8 @@ export function Dashboard() {
           />
           <StatCard
             label="Cost Saved (vs Naive)"
-            value={fmtINR(stats.totalSaved)}
-            icon={<span className="text-base font-bold">₹</span>}
+            value={fmt(stats.totalSaved)}
+            icon={<span className="text-base font-bold">{currencySymbol}</span>}
             iconBg="bg-amber-500/15 text-amber-400"
           />
         </div>
@@ -400,6 +397,7 @@ function ResultCard({
   containerMap: Map<number, ContainerType>
   configName?: string
 }) {
+  const fmt = useCurrencyFormatter()
   const d = result.computedAt instanceof Date ? result.computedAt : new Date(result.computedAt)
   const containerNames = result.packedContainers
     .map((pc) => containerMap.get(pc.containerTypeId)?.name ?? 'Unknown')
@@ -458,7 +456,7 @@ function ResultCard({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-[11px] text-slate-500">
           <span>{result.packedContainers.length} container{result.packedContainers.length !== 1 ? 's' : ''}</span>
           <span>{totalItems} items</span>
-          <span>{fmtINR(result.totalCost)}</span>
+          <span>{fmt(result.totalCost)}</span>
         </div>
         <p className="text-[10px] text-slate-600 mt-0.5 truncate">
           {containerSummary}

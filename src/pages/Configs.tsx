@@ -2,6 +2,7 @@ import { useState, type ChangeEvent } from 'react'
 import type { ContainerType, ItemType } from '../types'
 import { useContainerStore } from '../store/containerStore'
 import { useItemStore } from '../store/itemStore'
+import { useCurrencyFormatter, useCurrencySymbol } from '../lib/currency'
 import { SlideOver } from '../components/SlideOver'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
@@ -300,6 +301,8 @@ function ContainersEmptyState({ onAdd }: { onAdd: () => void }) {
 function ContainerTypesSection() {
   const store = useContainerStore()
   const containers = store.items
+  const fmt = useCurrencyFormatter()
+  const currencySymbol = useCurrencySymbol()
 
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<ContainerType | null>(null)
@@ -431,7 +434,7 @@ function ContainerTypesSection() {
                         {fmtInt(c.maxWeightKg)} kg
                       </td>
                       <td className="px-4 py-3.5 text-white/70">
-                        ₹{fmtInt(c.costPerUnit)}
+                        {fmt(c.costPerUnit)}
                       </td>
                       <td className="px-4 py-3.5">
                         <Toggle
@@ -492,7 +495,7 @@ function ContainerTypesSection() {
                     </div>
                     <div>
                       <p className="text-[10px] text-white/30 uppercase tracking-wide mb-0.5">Cost</p>
-                      <p className="text-sm text-white/80">₹{fmtInt(c.costPerUnit)}</p>
+                      <p className="text-sm text-white/80">{fmt(c.costPerUnit)}</p>
                     </div>
                   </div>
                   <div className="flex items-center justify-between pt-1 border-t border-border/60">
@@ -598,7 +601,7 @@ function ContainerTypesSection() {
           id="c-cost"
           label="Cost per Unit"
           required
-          prefix="₹"
+          prefix={currencySymbol}
           type="number"
           step="1"
           min="1"

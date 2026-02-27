@@ -16,13 +16,8 @@ import {
   ExclamationIcon,
   DragHandleIcon,
 } from '../components/icons'
+import { useCurrencyFormatter, useCurrencySymbol } from '../lib/currency'
 import type { SimulationResult, ContainerType, ItemType, PackingInput } from '../types'
-
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-function fmtINR(n: number) {
-  return '₹' + n.toLocaleString('en-IN')
-}
 
 function cbm(c: ContainerType) {
   return c.lengthM * c.widthM * c.heightM
@@ -49,6 +44,7 @@ function generatePDFBlob(
   result: SimulationResult,
   containerMap: Map<number, ContainerType>,
   itemMap: Map<number, ItemType>,
+  fmtCost: (n: number) => string,
 ): Blob {
   const lines: string[] = []
   const d = result.computedAt instanceof Date ? result.computedAt : new Date(result.computedAt)
@@ -59,7 +55,7 @@ function generatePDFBlob(
   lines.push('Summary')
   lines.push('-'.repeat(30))
   lines.push(`Containers Used: ${result.packedContainers.length}`)
-  lines.push(`Total Cost: ${fmtINR(result.totalCost)}`)
+  lines.push(`Total Cost: ${fmtCost(result.totalCost)}`)
   lines.push(`Avg Utilization: ${result.avgUtilization.toFixed(1)}%`)
   const totalPacked = result.packedContainers.reduce(
     (s, pc) => s + pc.packedItems.reduce((ss, pi) => ss + pi.quantity, 0), 0,
@@ -75,7 +71,7 @@ function generatePDFBlob(
     lines.push(`  Dimensions: ${ct?.lengthM} × ${ct?.widthM} × ${ct?.heightM} m`)
     lines.push(`  Utilization: ${pc.utilizationPct.toFixed(1)}%`)
     lines.push(`  Weight: ${pc.usedWeightKg.toFixed(1)} / ${ct?.maxWeightKg ?? '?'} kg`)
-    lines.push(`  Cost: ${fmtINR(ct?.costPerUnit ?? 0)}`)
+    lines.push(`  Cost: ${fmtCost(ct?.costPerUnit ?? 0)}`)
     lines.push('  Items:')
     for (const pi of pc.packedItems) {
       const it = itemMap.get(pi.itemTypeId)
@@ -218,6 +214,8 @@ export function ResultDetail() {
   const navigate = useNavigate()
   const allContainers = useContainerStore((s) => s.items)
   const allItems = useItemStore((s) => s.items)
+  const fmt = useCurrencyFormatter()
+  const currencySymbol = useCurrencySymbol()
 
   const [result, setResult] = useState<SimulationResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -386,7 +384,7 @@ export function ResultDetail() {
 
   const handleShare = useCallback(async () => {
     const url = window.location.href
-    const text = `CBM Pack Optimizer — Result #${id}\nContainers: ${result?.packedContainers.length}, Cost: ${fmtINR(result?.totalCost ?? 0)}, Utilization: ${result?.avgUtilization.toFixed(1)}%`
+    const text = `CBM Pack Optimizer — Result #${id}\nContainers: ${result?.packedContainers.length}, Cost: ${fmt(result?.totalCost ?? 0)}, Utilization: ${result?.avgUtilization.toFixed(1)}%`
 
     if (navigator.share) {
       try {
@@ -405,18 +403,18 @@ export function ResultDetail() {
       setShareError('Could not copy link')
       setTimeout(() => setShareError(null), 2000)
     }
-  }, [id, result])
+  }, [id, result, fmt])
 
   const handleExportPDF = useCallback(() => {
     if (!result) return
-    const blob = generatePDFBlob(result, containerMap, itemMap)
+    const blob = generatePDFBlob(result, containerMap, itemMap, fmt)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
     a.download = `pack-result-${id}.txt`
     a.click()
     URL.revokeObjectURL(url)
-  }, [result, containerMap, itemMap, id])
+  }, [result, containerMap, itemMap, id, fmt])
 
   // ── Loading / Not found ───────────────────────────────────────────
 
@@ -521,8 +519,8 @@ export function ResultDetail() {
         />
         <StatCard
           label="Total Cost"
-          value={fmtINR(result.totalCost)}
-          icon={<span className="text-xs text-slate-500">₹</span>}
+          value={fmt(result.totalCost)}
+          icon={<span className="text-xs text-slate-500">{currencySymbol}</span>}
         />
         <StatCard
           label="Avg Utilization"
@@ -621,7 +619,7 @@ export function ResultDetail() {
 
                 <div className="text-slate-400">Cost</div>
                 <div className="text-slate-200 text-right font-mono">
-                  {fmtINR(activeContainerType.costPerUnit)}
+                  {fmt(activeContainerType.costPerUnit)}
                 </div>
               </div>
 
@@ -711,7 +709,7 @@ export function ResultDetail() {
               </div>
               <div className="text-lg font-bold text-slate-100 font-mono">
                 {containerCBM > 0
-                  ? fmtINR(Math.round(activeContainerType.costPerUnit / containerCBM))
+                  ? fmt(Math.round(activeContainerType.costPerUnit / containerCBM))
                   : '—'}
                 <span className="text-xs text-slate-500 font-normal ml-1">/m³</span>
               </div>
@@ -809,18 +807,18 @@ export function ResultDetail() {
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-right text-slate-300 font-mono">{row.containers}</td>
-                      <td className="px-4 py-2.5 text-right text-slate-300 font-mono">{fmtINR(row.totalCost)}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-300 font-mono">{fmt(row.totalCost)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-300 font-mono">{row.avgUtil.toFixed(1)}%</td>
                       <td className="px-4 py-2.5 text-right text-slate-300 font-mono">
-                        {fmtINR(Math.round(row.costPerCBM))}/m³
+                        {fmt(Math.round(row.costPerCBM))}/m³
                       </td>
                       <td className="px-4 py-2.5 text-right font-mono">
                         {row.isCurrent ? (
                           <span className="text-slate-500">—</span>
                         ) : diff > 0 ? (
-                          <span className="text-red-400">+{fmtINR(diff)} (+{diffPct.toFixed(0)}%)</span>
+                          <span className="text-red-400">+{fmt(diff)} (+{diffPct.toFixed(0)}%)</span>
                         ) : diff < 0 ? (
-                          <span className="text-emerald-400">{fmtINR(diff)} ({diffPct.toFixed(0)}%)</span>
+                          <span className="text-emerald-400">{fmt(diff)} ({diffPct.toFixed(0)}%)</span>
                         ) : (
                           <span className="text-slate-500">Same</span>
                         )}
@@ -856,7 +854,7 @@ export function ResultDetail() {
                     <span className="text-slate-500">Containers</span>
                     <span className="text-slate-300 text-right font-mono">{row.containers}</span>
                     <span className="text-slate-500">Cost</span>
-                    <span className="text-slate-300 text-right font-mono">{fmtINR(row.totalCost)}</span>
+                    <span className="text-slate-300 text-right font-mono">{fmt(row.totalCost)}</span>
                     <span className="text-slate-500">Avg Util.</span>
                     <span className="text-slate-300 text-right font-mono">{row.avgUtil.toFixed(1)}%</span>
                     {!row.isCurrent && (

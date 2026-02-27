@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import type { ContainerType, ItemType, PackingInput, PackingProgress, SimulationConfig } from '../types'
+import { useCurrencyFormatter } from '../lib/currency'
 import { useContainerStore } from '../store/containerStore'
 import { useItemStore } from '../store/itemStore'
 import { useSimulationStore } from '../store/simulationStore'
@@ -25,7 +26,7 @@ type QtyMap = Record<number, number>
 // Helpers
 // ---------------------------------------------------------------------------
 
-function fmtINR(n: number) {
+function fmtNum(n: number) {
   return n.toLocaleString('en-IN')
 }
 
@@ -175,6 +176,7 @@ interface ContainerCardProps {
 }
 
 function ContainerCard({ container, checked, onChange }: ContainerCardProps) {
+  const fmt = useCurrencyFormatter()
   const vol = cbmOf(container)
   const id = container.id!
 
@@ -206,14 +208,14 @@ function ContainerCard({ container, checked, onChange }: ContainerCardProps) {
           <p className={`font-medium text-sm leading-snug ${checked ? 'text-white' : 'text-white/75'}`}>
             {container.name}
           </p>
-          <p className="text-accent text-sm font-semibold shrink-0">₹{fmtINR(container.costPerUnit)}</p>
+          <p className="text-accent text-sm font-semibold shrink-0">{fmt(container.costPerUnit)}</p>
         </div>
         <p className="text-white/35 text-xs mt-1 font-mono">
           {container.lengthM} × {container.widthM} × {container.heightM} m
         </p>
         <div className="flex gap-3 mt-1.5">
           <span className="text-[11px] text-white/40">{vol.toFixed(2)} m³</span>
-          <span className="text-[11px] text-white/40">{fmtINR(container.maxWeightKg)} kg cap.</span>
+          <span className="text-[11px] text-white/40">{fmtNum(container.maxWeightKg)} kg cap.</span>
         </div>
       </div>
     </label>

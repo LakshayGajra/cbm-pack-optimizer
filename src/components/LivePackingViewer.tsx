@@ -13,7 +13,6 @@ import {
   type Vec3,
   type Face,
   VIEW_PRESETS,
-  toItemCode,
   shadeFace,
   rotateY,
   rotateX,
@@ -127,7 +126,7 @@ export function LivePackingViewer({
       return rotateX(rotateY(centered, rotYVal), rotXVal)
     }
 
-    const faces: Face[] = []
+    const faces: (Face & { itemIdx: number })[] = []
 
     // Build combined item list: static items + animated items with interpolated pz
     const allItems: Array<PlacedItem & { effectivePz: number }> = []
@@ -147,12 +146,12 @@ export function LivePackingViewer({
     }
 
     // ── Item boxes ─────────────────────────────────────────────────
-    for (const item of allItems) {
+    for (let itemIdx = 0; itemIdx < allItems.length; itemIdx++) {
+      const item = allItems[itemIdx]
       const info = itemTypeMapRef.current.get(item.itemTypeId)
       const color = info?.color ?? '#888888'
       const alpha = 0.92
 
-      // Remap: 3D_x = px, 3D_y = pz (height->up), 3D_z = py (width->depth)
       const rawCorners = boxCorners(
         item.px, item.effectivePz, item.py,
         item.placedLengthM, item.placedHeightM, item.placedWidthM,
@@ -169,17 +168,24 @@ export function LivePackingViewer({
           color: shadeFace(color, shade, alpha),
           alpha,
           depth: centroid.z,
+          itemIdx,
         })
       }
     }
 
-    // ── Item code labels ────────────────────────────────
-    type LabelAnchor = { screenX: number; screenY: number; code: string }
+    // ── Label anchors for ALL front-facing faces ───────
+    type LabelAnchor = {
+      poly: { x: number; y: number }[]
+      ux: number; uy: number; edgeLenU: number
+      vx: number; vy: number; edgeLenV: number
+      name: string; depth: number; itemIdx: number
+    }
     const labelAnchors: LabelAnchor[] = []
 
-    for (const item of allItems) {
+    for (let itemIdx = 0; itemIdx < allItems.length; itemIdx++) {
+      const item = allItems[itemIdx]
       const info = itemTypeMapRef.current.get(item.itemTypeId)
-      if (!info?.showItemCode) continue
+      if (!info) continue
 
       const rawCorners = boxCorners(
         item.px, item.effectivePz, item.py,
@@ -188,18 +194,22 @@ export function LivePackingViewer({
       const tCorners = rawCorners.map(transform)
       const faceQuads = boxFaces(tCorners)
 
-      let minDepth = Infinity
-      let frontCentroid: Vec3 | null = null
       for (const verts of faceQuads) {
-        const c = faceCentroid(verts)
-        if (c.z < minDepth) {
-          minDepth = c.z
-          frontCentroid = c
+        const a = verts[0], b = verts[1], c = verts[2]
+        const u = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z }
+        const v = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z }
+        const nz = u.x * v.y - u.y * v.x
+        if (nz >= 0) continue
+
+        const poly = verts.map(vt => projectIso(vt, zoom, cx, cy))
+        const ux = poly[1].x - poly[0].x, uy = poly[1].y - poly[0].y
+        const vx = poly[3].x - poly[0].x, vy = poly[3].y - poly[0].y
+        const edgeLenU = Math.sqrt(ux * ux + uy * uy)
+        const edgeLenV = Math.sqrt(vx * vx + vy * vy)
+        if (edgeLenU > 2 && edgeLenV > 2) {
+          const cent = faceCentroid(verts)
+          labelAnchors.push({ poly, ux, uy, edgeLenU, vx, vy, edgeLenV, name: info.name, depth: cent.z, itemIdx })
         }
-      }
-      if (frontCentroid) {
-        const screen = projectIso(frontCentroid, zoom, cx, cy)
-        labelAnchors.push({ screenX: screen.x, screenY: screen.y, code: toItemCode(info.name) })
       }
     }
 
@@ -214,21 +224,26 @@ export function LivePackingViewer({
     // ── Sort faces (painter's algorithm) ───────────────────────────
     faces.sort((a, b) => a.depth - b.depth)
 
-    // ── Render faces ───────────────────────────────────────────────
+    // ── Render faces & collect painted polygons for occlusion ──────
+    const paintedPolys: { poly: { x: number; y: number }[]; itemIdx: number; depth: number }[] = []
     for (const face of faces) {
       ctx.beginPath()
+      const projected: { x: number; y: number }[] = []
       const p0 = projectIso(face.vertices[0], zoom, cx, cy)
+      projected.push(p0)
       ctx.moveTo(p0.x, p0.y)
       for (let i = 1; i < face.vertices.length; i++) {
         const p = projectIso(face.vertices[i], zoom, cx, cy)
+        projected.push(p)
         ctx.lineTo(p.x, p.y)
       }
       ctx.closePath()
       ctx.fillStyle = face.color
       ctx.fill()
-      ctx.strokeStyle = `rgba(0,0,0,0.3)`
-      ctx.lineWidth = 0.5
+      ctx.strokeStyle = '#000000'
+      ctx.lineWidth = 1.2
       ctx.stroke()
+      paintedPolys.push({ poly: projected, itemIdx: face.itemIdx, depth: face.depth })
     }
 
     // ── Render container wireframe ─────────────────────────────────
@@ -245,20 +260,81 @@ export function LivePackingViewer({
     }
     ctx.setLineDash([])
 
-    // ── Item code labels ───────────────────────────────────────────
-    if (labelAnchors.length > 0) {
-      const fontSize = Math.max(8, Math.min(14, zoom * 0.28))
-      ctx.font = `bold ${fontSize}px ui-monospace, monospace`
+    // ── Point-in-polygon for occlusion ─────────────────────────────
+    const ptInPoly = (px: number, py: number, poly: { x: number; y: number }[]) => {
+      let inside = false
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const yi = poly[i].y, yj = poly[j].y
+        if ((yi > py) !== (yj > py) &&
+            px < (poly[j].x - poly[i].x) * (py - yi) / (yj - yi) + poly[i].x) {
+          inside = !inside
+        }
+      }
+      return inside
+    }
+
+    // ── Item name labels (affine-transformed, occlusion-culled) ──
+    labelAnchors.sort((a, b) => b.depth - a.depth)
+    for (const label of labelAnchors) {
+      let txX: number, txY: number, txLen: number
+      let tyX: number, tyY: number, tyLen: number
+      if (label.edgeLenU >= label.edgeLenV) {
+        txX = label.ux; txY = label.uy; txLen = label.edgeLenU
+        tyX = label.vx; tyY = label.vy; tyLen = label.edgeLenV
+      } else {
+        txX = label.vx; txY = label.vy; txLen = label.edgeLenV
+        tyX = label.ux; tyY = label.uy; tyLen = label.edgeLenU
+      }
+      const fcx = (label.poly[0].x + label.poly[2].x) / 2
+      const fcy = (label.poly[0].y + label.poly[2].y) / 2
+
+      // Occlusion: skip if a face from a different item painted later covers center
+      let occluded = false
+      for (const pp of paintedPolys) {
+        if (pp.itemIdx === label.itemIdx) continue
+        if (pp.depth <= label.depth) continue
+        if (ptInPoly(fcx, fcy, pp.poly)) { occluded = true; break }
+      }
+      if (occluded) continue
+
+      const nameFontSize = Math.min(tyLen * 0.28, 28)
+      if (nameFontSize < 3) continue
+      const headerFontSize = nameFontSize * 0.6
+      const lineGap = nameFontSize * 0.15
+      const totalH = headerFontSize + lineGap + nameFontSize
+      const line1Y = -(totalH / 2) + headerFontSize / 2
+      const line2Y = (totalH / 2) - nameFontSize / 2
+
+      const txnX = txX / txLen, txnY = txY / txLen
+      const tynX = tyX / tyLen, tynY = tyY / tyLen
+      const padW = txLen * 0.82
+
+      ctx.save()
+      ctx.beginPath()
+      ctx.moveTo(label.poly[0].x, label.poly[0].y)
+      for (let i = 1; i < label.poly.length; i++) ctx.lineTo(label.poly[i].x, label.poly[i].y)
+      ctx.closePath()
+      ctx.clip()
+      ctx.transform(txnX, txnY, tynX, tynY, fcx, fcy)
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      for (const label of labelAnchors) {
-        ctx.fillStyle = 'rgba(0,0,0,0.65)'
-        ctx.fillText(label.code, label.screenX + 1, label.screenY + 1)
-        ctx.fillStyle = '#ffffff'
-        ctx.fillText(label.code, label.screenX, label.screenY)
+
+      ctx.font = `${headerFontSize}px sans-serif`
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'
+      const hMeasured = ctx.measureText('Item Name :')
+      if (hMeasured.width <= padW) ctx.fillText('Item Name :', 0, line1Y)
+
+      let finalNameSize = nameFontSize
+      ctx.font = `bold ${finalNameSize}px sans-serif`
+      const nMeasured = ctx.measureText(label.name)
+      if (nMeasured.width > padW && nMeasured.width > 0) {
+        finalNameSize = finalNameSize * (padW / nMeasured.width)
+        if (finalNameSize < 3) { ctx.restore(); continue }
+        ctx.font = `bold ${finalNameSize}px sans-serif`
       }
-      ctx.textAlign = 'left'
-      ctx.textBaseline = 'alphabetic'
+      ctx.fillStyle = 'rgba(0,0,0,0.85)'
+      ctx.fillText(label.name, 0, line2Y)
+      ctx.restore()
     }
 
     // ── Axis labels ────────────────────────────────────────────────

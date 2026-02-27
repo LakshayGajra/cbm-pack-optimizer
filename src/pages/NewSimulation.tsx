@@ -355,7 +355,7 @@ function SummaryBar({
   onRun,
 }: SummaryBarProps) {
   return (
-    <div className="fixed bottom-16 sm:bottom-0 left-0 right-0 z-30 bg-surface/95 backdrop-blur-sm border-t border-border">
+    <div className="fixed bottom-16 md:bottom-0 left-0 md:left-56 right-0 z-30 bg-surface/95 backdrop-blur-sm border-t border-border">
       {error && (
         <div className="px-4 sm:px-6 py-2 bg-red-500/10 border-b border-red-500/20">
           <p className="text-xs text-red-400">{error}</p>
@@ -548,7 +548,7 @@ export function NewSimulation() {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto pb-44 sm:pb-28">
+      <div className="max-w-7xl mx-auto pb-44 sm:pb-40 md:pb-28">
         {/* Page header + presets */}
         <div className="px-4 sm:px-6 py-6 border-b border-border">
           <h1 className="text-xl font-bold text-white">New Simulation</h1>

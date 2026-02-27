@@ -274,14 +274,14 @@ export function LivePacking() {
   // ── Render ─────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3rem)] md:h-screen">
+    <div className="flex flex-col h-[calc(100vh-8rem)] md:h-screen">
       {/* Header */}
       <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border">
         <h1 className="text-base font-semibold text-white">Live Packing</h1>
         <select
           value={state.selectedContainerId ?? ''}
           onChange={e => handleContainerChange(Number(e.target.value))}
-          className="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-accent"
+          className="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-accent max-w-[10rem] sm:max-w-xs"
         >
           {activeContainers.map(c => (
             <option key={c.id} value={c.id}>
@@ -371,7 +371,7 @@ export function LivePacking() {
                   return (
                     <div
                       key={q.itemTypeId}
-                      className="flex items-center gap-3 px-3 py-2 bg-surface rounded-lg border border-border"
+                      className="flex items-center gap-3 px-3 py-2 bg-surface rounded-lg border border-border min-w-0"
                     >
                       <span
                         className="w-3 h-3 rounded-sm shrink-0"
@@ -397,11 +397,11 @@ export function LivePacking() {
 
       {/* Stats Bar */}
       <div className="border-t border-border bg-surface/50 px-4 sm:px-6 py-3">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+        <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-6 gap-y-2 text-xs">
           {/* Volume utilization */}
-          <div className="flex items-center gap-2 min-w-[140px]">
+          <div className="flex items-center gap-2">
             <span className="text-slate-400">Vol:</span>
-            <div className="flex-1 h-2 bg-border rounded-full overflow-hidden max-w-[100px]">
+            <div className="w-12 sm:w-20 h-2 bg-border rounded-full overflow-hidden">
               <div
                 className="h-full bg-accent rounded-full transition-all duration-300"
                 style={{ width: `${Math.min(100, state.utilizationPct)}%` }}
@@ -411,9 +411,9 @@ export function LivePacking() {
           </div>
 
           {/* Weight utilization */}
-          <div className="flex items-center gap-2 min-w-[140px]">
+          <div className="flex items-center gap-2">
             <span className="text-slate-400">Wt:</span>
-            <div className="flex-1 h-2 bg-border rounded-full overflow-hidden max-w-[100px]">
+            <div className="w-12 sm:w-20 h-2 bg-border rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-300 ${weightPct > 90 ? 'bg-red-500' : 'bg-emerald-500'}`}
                 style={{ width: `${Math.min(100, weightPct)}%` }}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import type { ContainerType, ItemType, PackingInput, PackingProgress, SimulationConfig } from '../types'
 import { useContainerStore } from '../store/containerStore'
@@ -51,13 +51,6 @@ interface SaveConfigDialogProps {
 function SaveConfigDialog({ open, isSaving, onClose, onSave }: SaveConfigDialogProps) {
   const [name, setName] = useState('')
   const [err, setErr] = useState('')
-
-  useEffect(() => {
-    if (open) {
-      setName('')
-      setErr('')
-    }
-  }, [open])
 
   function handleSave() {
     if (!name.trim()) {
@@ -649,12 +642,14 @@ export function NewSimulation() {
       {isRunning && <RunProgressOverlay progress={progress} />}
 
       {/* Save Config dialog */}
-      <SaveConfigDialog
-        open={saveOpen}
-        isSaving={isSavingConfig}
-        onClose={() => setSaveOpen(false)}
-        onSave={handleSaveConfig}
-      />
+      {saveOpen && (
+        <SaveConfigDialog
+          open
+          isSaving={isSavingConfig}
+          onClose={() => setSaveOpen(false)}
+          onSave={handleSaveConfig}
+        />
+      )}
 
       {/* Sticky summary + actions bar */}
       <SummaryBar

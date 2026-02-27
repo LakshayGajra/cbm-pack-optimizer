@@ -104,7 +104,7 @@ function packIntoContainer(
   const containerVolume = cW * cD * cH
 
   // Start with one space that is the entire container
-  let spaces: Space[] = [{ x: 0, y: 0, z: 0, w: cW, d: cD, h: cH }]
+  const spaces: Space[] = [{ x: 0, y: 0, z: 0, w: cW, d: cD, h: cH }]
 
   const remaining: FlatItem[] = []
 

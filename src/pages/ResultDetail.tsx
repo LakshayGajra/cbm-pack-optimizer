@@ -548,7 +548,7 @@ export function ResultDetail() {
             const ct = containerMap.get(pc.containerTypeId)
             return (
               <button
-                key={i}
+                key={`${pc.containerTypeId}-${i}`}
                 type="button"
                 onClick={() => setActiveTab(i)}
                 className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${

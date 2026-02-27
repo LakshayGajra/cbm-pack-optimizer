@@ -63,7 +63,14 @@ function reducer(state: State, action: Action): State {
       return {
         ...state,
         staticItems: [...state.staticItems, ...state.animatingItems.map(a => {
-          const { animStartTime, animFromPz, animDone, ...placed } = a
+          const placed: PlacedItem = {
+          itemTypeId: a.itemTypeId,
+          px: a.px, py: a.py, pz: a.pz,
+          placedLengthM: a.placedLengthM,
+          placedWidthM: a.placedWidthM,
+          placedHeightM: a.placedHeightM,
+          rotation: a.rotation,
+        }
           return placed
         })],
         animatingItems: [],

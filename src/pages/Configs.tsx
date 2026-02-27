@@ -249,15 +249,18 @@ function SectionDivider({ label }: { label: string }) {
 function ActionBtn({
   onClick,
   variant,
+  label,
   children,
 }: {
   onClick: () => void
   variant: 'edit' | 'delete'
+  label: string
   children: React.ReactNode
 }) {
   return (
     <button
       onClick={onClick}
+      aria-label={label}
       className={`p-1.5 rounded-lg transition-colors ${
         variant === 'edit'
           ? 'text-white/30 hover:text-white hover:bg-white/10'
@@ -438,10 +441,10 @@ function ContainerTypesSection() {
                       </td>
                       <td className="px-4 py-3.5 pr-6">
                         <div className="flex items-center gap-1 justify-end">
-                          <ActionBtn variant="edit" onClick={() => openEdit(c)}>
+                          <ActionBtn variant="edit" label={`Edit ${c.name}`} onClick={() => openEdit(c)}>
                             <PencilIcon />
                           </ActionBtn>
-                          <ActionBtn variant="delete" onClick={() => setDeleteId(c.id!)}>
+                          <ActionBtn variant="delete" label={`Delete ${c.name}`} onClick={() => setDeleteId(c.id!)}>
                             <TrashIcon />
                           </ActionBtn>
                         </div>
@@ -470,10 +473,10 @@ function ContainerTypesSection() {
                       </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <ActionBtn variant="edit" onClick={() => openEdit(c)}>
+                      <ActionBtn variant="edit" label={`Edit ${c.name}`} onClick={() => openEdit(c)}>
                         <PencilIcon />
                       </ActionBtn>
-                      <ActionBtn variant="delete" onClick={() => setDeleteId(c.id!)}>
+                      <ActionBtn variant="delete" label={`Delete ${c.name}`} onClick={() => setDeleteId(c.id!)}>
                         <TrashIcon />
                       </ActionBtn>
                     </div>
@@ -822,10 +825,10 @@ function ItemTypesSection() {
                     </td>
                     <td className="px-4 py-3.5 pr-6">
                       <div className="flex items-center gap-1 justify-end">
-                        <ActionBtn variant="edit" onClick={() => openEdit(it)}>
+                        <ActionBtn variant="edit" label={`Edit ${it.name}`} onClick={() => openEdit(it)}>
                           <PencilIcon />
                         </ActionBtn>
-                        <ActionBtn variant="delete" onClick={() => setDeleteId(it.id!)}>
+                        <ActionBtn variant="delete" label={`Delete ${it.name}`} onClick={() => setDeleteId(it.id!)}>
                           <TrashIcon />
                         </ActionBtn>
                       </div>
@@ -857,10 +860,10 @@ function ItemTypesSection() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <ActionBtn variant="edit" onClick={() => openEdit(it)}>
+                    <ActionBtn variant="edit" label={`Edit ${it.name}`} onClick={() => openEdit(it)}>
                       <PencilIcon />
                     </ActionBtn>
-                    <ActionBtn variant="delete" onClick={() => setDeleteId(it.id!)}>
+                    <ActionBtn variant="delete" label={`Delete ${it.name}`} onClick={() => setDeleteId(it.id!)}>
                       <TrashIcon />
                     </ActionBtn>
                   </div>
